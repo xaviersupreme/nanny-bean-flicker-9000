@@ -1800,23 +1800,23 @@ function showSettingsMenu(from?: GuiObject) {
 	}
 
 	section("targeting");
-	makeDropdown("Target mode", "targetPriority", ["mouse", "closest", "camera"], "mouse");
-	makeToggle("Click through walls", "clickThroughWalls", false);
-	makeToggle("Closest body part", "preferClosestPart", true);
-	makeToggle("Alive players only", "requireAliveTarget", true);
-	makeToggle("Skip teammates", "teamCheck", false);
+	makeDropdown("Target priority", "targetPriority", ["mouse", "closest", "camera"], "mouse");
+	makeToggle("Click players through walls", "clickThroughWalls", false);
+	makeToggle("Use closest body part", "preferClosestPart", true);
+	makeToggle("Only target alive players", "requireAliveTarget", true);
+	makeToggle("Ignore teammates", "teamCheck", false);
 
 	section("fling");
-	makeDropdown("Fling type", "method", ["NaN", "skidfling"], "NaN");
-	makeToggle("Prediction", "flingPrediction", true);
+	makeDropdown("Fling method", "method", ["NaN", "skidfling"], "NaN");
+	makeToggle("Predict target movement", "flingPrediction", true);
 	let setManualFlingDurationVisible: ((visible: boolean, animated?: boolean) => void) | undefined;
-	makeToggle("Auto stop", "autoDetectFling", true, (on) => setManualFlingDurationVisible?.(!on, true));
-	const manualFlingDuration = makeSlider("Manual time", "manualFlingDuration", 2, 0.25, 8, 0.05, "s");
+	makeToggle("Auto stop after fling", "autoDetectFling", true, (on) => setManualFlingDurationVisible?.(!on, true));
+	const manualFlingDuration = makeSlider("Manual fling time", "manualFlingDuration", 2, 0.25, 8, 0.05, "s");
 	setManualFlingDurationVisible = manualFlingDuration.setVisible;
 	setManualFlingDurationVisible(config.autoDetectFling !== true, false);
-	makeToggle("Loop target", "repeatSameTarget", false);
-	makeToggle("Retry escapes", "autoRefling", true);
-	makeToggle("Anti fling", "antiFling", false);
+	makeToggle("Keep flinging same target", "repeatSameTarget", false);
+	makeToggle("Retry if target escapes", "autoRefling", true);
+	makeToggle("Anti fling collisions", "antiFling", false);
 
 	section("handoff");
 	makeToggle("Hide real avatar during handoff", "hideRealCharacter", true);
