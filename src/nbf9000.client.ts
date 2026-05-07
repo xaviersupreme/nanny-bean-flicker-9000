@@ -17,6 +17,7 @@ interface Runtime {
 	stop?: () => void;
 	fling?: (tgt: Tgt, dur?: number) => boolean | undefined;
 	clear?: () => void;
+	doFling?: (rp: BasePart, hum: Humanoid, tgt: Tgt, cf: CFrame) => void;
 	oldDestroyHeight?: number;
 	sessionModel?: Model;
 	util?: {
@@ -613,6 +614,8 @@ function applyConfigSideEffects(key: keyof Config) {
 		const restorePosition = settingsRoot?.Position;
 		const restoreSize = settingsRoot?.Size;
 		const restoreVisible = settingsRoot?.Visible ?? true;
+		const oldPage = settingsGui?.FindFirstChild("settingsPage", true);
+		const restoreScroll = oldPage?.IsA("ScrollingFrame") ? oldPage.CanvasPosition : undefined;
 		task.defer(() => {
 			if (settingsGui?.Parent) {
 				destroySettingsMenu();
@@ -621,6 +624,13 @@ function applyConfigSideEffects(key: keyof Config) {
 					if (restorePosition) settingsRoot.Position = restorePosition;
 					if (restoreSize) settingsRoot.Size = restoreSize;
 					settingsRoot.Visible = restoreVisible;
+				}
+				const newPage = settingsGui?.FindFirstChild("settingsPage", true);
+				if (newPage?.IsA("ScrollingFrame") && restoreScroll) {
+					newPage.CanvasPosition = restoreScroll;
+					task.defer(() => {
+						if (newPage.Parent) newPage.CanvasPosition = restoreScroll;
+					});
 				}
 				if (settingsGlow && settingsRoot) {
 					settingsGlow.AnchorPoint = settingsRoot.AnchorPoint;
@@ -901,6 +911,8 @@ function updateHrpOutlines() {
 }
 
 function makeIntroText(parent: Instance, s: string, size: number, y: number, high = false) {
+	const theme = currentTheme();
+	const textIsLight = theme.text.R * 0.2126 + theme.text.G * 0.7152 + theme.text.B * 0.0722 >= 0.45;
 	const label = new Instance("TextLabel");
 	label.BackgroundTransparency = 1;
 	label.AnchorPoint = new Vector2(0.5, 0.5);
@@ -909,8 +921,9 @@ function makeIntroText(parent: Instance, s: string, size: number, y: number, hig
 	label.Font = high ? Enum.Font.Arcade : Enum.Font.Code;
 	label.Text = s;
 	label.TextSize = size;
-	label.TextColor3 = currentTheme().text;
-	label.TextStrokeTransparency = high ? 0.25 : 0.55;
+	label.TextColor3 = theme.text;
+	label.TextStrokeColor3 = textIsLight ? theme.surface : new Color3(1, 1, 1);
+	label.TextStrokeTransparency = textIsLight ? (high ? 0.25 : 0.55) : (high ? 0.18 : 0.34);
 	label.TextXAlignment = Enum.TextXAlignment.Center;
 	label.TextYAlignment = Enum.TextYAlignment.Center;
 	label.ZIndex = 6;
@@ -1059,11 +1072,13 @@ function showSettingsMenu(from?: GuiObject) {
 	title.TextSize = 18;
 	title.TextXAlignment = Enum.TextXAlignment.Left;
 	title.TextYAlignment = Enum.TextYAlignment.Center;
-	title.TextStrokeTransparency = 0.6;
+	const titleIsLight = theme.text.R * 0.2126 + theme.text.G * 0.7152 + theme.text.B * 0.0722 >= 0.45;
+	title.TextStrokeColor3 = titleIsLight ? theme.surface : new Color3(1, 1, 1);
+	title.TextStrokeTransparency = titleIsLight ? 0.38 : 0.24;
 	title.TextTruncate = Enum.TextTruncate.AtEnd;
 	title.ZIndex = 5;
 	title.Parent = top;
-	const titleGrad = accentGradient(title);
+	const titleGrad = titleIsLight ? accentGradient(title) : undefined;
 
 	const mini = new Instance("TextButton");
 	mini.AnchorPoint = new Vector2(1, 0);
@@ -1146,6 +1161,7 @@ function showSettingsMenu(from?: GuiObject) {
 	}
 
 	const page = new Instance("ScrollingFrame");
+	page.Name = "settingsPage";
 	page.Size = UDim2.fromScale(1, 1);
 	page.BackgroundTransparency = 1;
 	page.BorderSizePixel = 0;
@@ -1641,7 +1657,9 @@ function showSettingsMenu(from?: GuiObject) {
 		const closedHeight = 42;
 		const optionHeight = 24;
 		const dropdownClosedHeight = 26;
-		const dropdownWidth = 132;
+		let longestValue = fallback.size();
+		for (const value of values) longestValue = math.max(longestValue, value.size());
+		const dropdownWidth = math.clamp(math.ceil(longestValue * 7.5 + 40), 132, 194);
 		const dropdownOpenHeight = dropdownClosedHeight + values.size() * optionHeight + 8;
 		const openHeight = 8 + dropdownOpenHeight + 6;
 
@@ -1671,6 +1689,7 @@ function showSettingsMenu(from?: GuiObject) {
 		caption.TextSize = 15;
 		caption.TextXAlignment = Enum.TextXAlignment.Left;
 		caption.TextYAlignment = Enum.TextYAlignment.Center;
+		caption.TextWrapped = true;
 		caption.ZIndex = 6;
 		caption.Parent = card;
 
@@ -1694,6 +1713,7 @@ function showSettingsMenu(from?: GuiObject) {
 		button.TextSize = 13;
 		button.Text = configString(key, fallback);
 		button.TextXAlignment = Enum.TextXAlignment.Center;
+		button.TextTruncate = Enum.TextTruncate.AtEnd;
 		button.AutoButtonColor = false;
 		button.ZIndex = 9;
 		button.Parent = dropdown;
@@ -1755,6 +1775,7 @@ function showSettingsMenu(from?: GuiObject) {
 			option.TextColor3 = theme.text;
 			option.TextSize = 13;
 			option.TextXAlignment = Enum.TextXAlignment.Center;
+			option.TextTruncate = Enum.TextTruncate.AtEnd;
 			option.Visible = false;
 			option.ZIndex = 11;
 			option.LayoutOrder = i;
@@ -2012,7 +2033,7 @@ function showSettingsMenu(from?: GuiObject) {
 		if (strokeGrad) strokeGrad.Rotation = (t * 42 * motion) % 360;
 		glowGrad.Rotation = (t * -34 * motion) % 360;
 		glowStroke.Transparency = 0.58 + pulse * 0.05;
-		titleGrad.Offset = new Vector2(math.sin(t * 1.6 * motion) * 0.25, 0);
+		if (titleGrad) titleGrad.Offset = new Vector2(math.sin(t * 1.6 * motion) * 0.25, 0);
 		const width = math.max(24, mathStrip.AbsoluteSize.X);
 		const height = math.max(10, mathStrip.AbsoluteSize.Y);
 		const points = new Array<Vector2>();
@@ -2200,6 +2221,7 @@ function playIntro() {
 
 	const title = makeIntroText(card, "NBF9000", 28, 45, true);
 	const sub = makeIntroText(card, ":3 :3 :3 :3 :3 :3 :3", 13, 78);
+	const introTextIsLight = theme.text.R * 0.2126 + theme.text.G * 0.7152 + theme.text.B * 0.0722 >= 0.45;
 	title.TextTransparency = 1;
 	title.TextStrokeTransparency = 1;
 	sub.TextTransparency = 1;
@@ -2207,8 +2229,8 @@ function playIntro() {
 	const boot = makeIntroText(card, "ctrl+mb1 / tap player", 12, 100);
 	boot.TextTransparency = 1;
 	boot.TextStrokeTransparency = 1;
-	const titleGrad = accentGradient(title);
-	const subGrad = accentGradient(sub);
+	const titleGrad = introTextIsLight ? accentGradient(title) : undefined;
+	const subGrad = introTextIsLight ? accentGradient(sub) : undefined;
 
 	const barBox = new Instance("Frame");
 	barBox.AnchorPoint = new Vector2(0.5, 1);
@@ -2263,9 +2285,9 @@ function playIntro() {
 	tweenService.Create(topFill, new TweenInfo(0.12), { BackgroundTransparency: 0 }).Play();
 	tweenService.Create(stroke, new TweenInfo(0.12), { Transparency: 0 }).Play();
 	for (const frame of borderFrames) tweenService.Create(frame, new TweenInfo(0.12), { BackgroundTransparency: 0.18 }).Play();
-	tweenService.Create(title, new TweenInfo(0.12), { TextTransparency: 0, TextStrokeTransparency: 0.25 }).Play();
-	tweenService.Create(sub, new TweenInfo(0.12), { TextTransparency: 0.12, TextStrokeTransparency: 0.55 }).Play();
-	tweenService.Create(boot, new TweenInfo(0.12), { TextTransparency: 0.26, TextStrokeTransparency: 0.55 }).Play();
+	tweenService.Create(title, new TweenInfo(0.12), { TextTransparency: 0, TextStrokeTransparency: introTextIsLight ? 0.25 : 0.18 }).Play();
+	tweenService.Create(sub, new TweenInfo(0.12), { TextTransparency: 0.12, TextStrokeTransparency: introTextIsLight ? 0.55 : 0.34 }).Play();
+	tweenService.Create(boot, new TweenInfo(0.12), { TextTransparency: 0.26, TextStrokeTransparency: introTextIsLight ? 0.55 : 0.34 }).Play();
 
 	const start = os.clock();
 	let lastBar = 0;
@@ -2298,8 +2320,8 @@ function playIntro() {
 		edge.Rotation = (edge.Rotation + 1.4) % 360;
 		edge.Offset = new Vector2(math.sin(t * 0.26) * 0.25, 0);
 		const textOffset = new Vector2(math.sin(t * 4) * 0.28, 0);
-		titleGrad.Offset = textOffset;
-		subGrad.Offset = textOffset;
+		if (titleGrad) titleGrad.Offset = textOffset;
+		if (subGrad) subGrad.Offset = textOffset;
 		boot.TextColor3 = theme.muted;
 		if (t - lastBar > 0.055) {
 			lastBar = t;
@@ -3584,7 +3606,7 @@ function tweenSkidCFrame(wanted: CFrame) {
 	return current.Lerp(wanted, alpha);
 }
 
-function doFling(rp: BasePart, hum: Humanoid, tgt: Tgt, cf: CFrame) {
+runtime.doFling = (rp: BasePart, hum: Humanoid, tgt: Tgt, cf: CFrame) => {
 	const tp = getPart(tgt);
 	const rep = flingPart(tgt) ?? tp;
 	const t = os.clock();
@@ -3629,7 +3651,7 @@ function doFling(rp: BasePart, hum: Humanoid, tgt: Tgt, cf: CFrame) {
 
 	pcall(() => sethiddenproperty(hum, "MoveDirectionInternal", new Vector3(0 / 0, 0 / 0, 0 / 0)));
 	pcall(() => sethiddenproperty(hum, "NetworkHumanoidState", Enum.HumanoidStateType.Freefall));
-}
+};
 
 // sim
 track(runService.PreSimulation.Connect(() => {
@@ -3663,7 +3685,7 @@ track(runService.PreSimulation.Connect(() => {
 
 	busy = true;
 	if (method !== "skidfling") noCollideTarget(item.tgt);
-	doFling(rp, hum, item.tgt, cf);
+	runtime.doFling?.(rp, hum, item.tgt, cf);
 }));
 
 runtime.stop = stop;
